@@ -1,5 +1,6 @@
 import os
 import requests
+import feedparser
 
 # itune's search api
 api = "https://itunes.apple.com/search?term="
@@ -12,7 +13,7 @@ def search_results(url):
 
         # fetch and print podcast results
         for item in data['results']:
-            print(f"Selection: {selection}")
+            print(f"Selection ID: {selection}")
             print(f"Name: {item['trackName']}")
             print(f"Artist: {item['artistName']}")
             print("-"*40)
@@ -23,14 +24,23 @@ def search_results(url):
 
     podcast_choice = input(">> Choose Podcast by ID: ")
     selected = data['results'][int(podcast_choice)-1]
-    print(selected['trackName'])
+    print(f"Selected Podcast: {selected['trackName']}")
     return selected
+
+def get_RSS(selected_podcast):
+    return selected_podcast['feedUrl']
+
+def parse_RSS(rss):
+    parsed_url = feedparser.parse(rss)
+    return parsed_url
+
 
 def main():
     search = input(">> ").replace(" ", "+")
     # entity as podcast, this only finds podcasts
     url = api+search+"&entity=podcast"
-    search_results(url)
+    podcast = search_results(url)
+    RSS = get_RSS(podcast)
 
 if __name__ == "__main__":
     main()
