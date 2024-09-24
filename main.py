@@ -34,6 +34,10 @@ def parse_RSS(rss):
     parsed_url = feedparser.parse(rss)
     return parsed_url
 
+def get_episode_list(podcast_RSS):
+    for entry in podcast_RSS['entries']:
+        print(entry['title'])
+        
 
 def main():
     search = input(">> ").replace(" ", "+")
@@ -41,6 +45,8 @@ def main():
     url = api+search+"&entity=podcast"
     podcast = search_results(url)
     RSS = get_RSS(podcast)
+    parsed_rss = parse_RSS(RSS)
+    get_episode_list(parsed_rss)
 
 if __name__ == "__main__":
     main()
