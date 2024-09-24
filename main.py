@@ -58,9 +58,13 @@ def get_podcast_title(feed):
     else:
         return "No title found"
 
+# filenames must be correct, otherwise it won't save correctly
+def sanitize_filename(filename):
+    return "".join(c for c in filename if c.isalnum() or c in (' ', '_')).rstrip()
+
 def download_mp3(feed, episode):
     episode_number = get_episode_number(feed)
-    podcast_title = get_podcast_title(feed)
+    podcast_title = sanitize_filename(get_podcast_title(feed))
     if not os.path.isdir(podcast_title):
         os.makedirs(podcast_title)
 
@@ -70,7 +74,7 @@ def download_mp3(feed, episode):
         for enclosure in entry.enclosures:
             if enclosure.type == 'audio/mpeg':
                 mp3_url = enclosure.href
-                episode_title = (entry.title) + ".mp3"
+                episode_title = sanitize_filename(entry.title) + ".mp3"
                 file_path = os.path.join(podcast_title, episode_title)
                     
                 # Download the MP3 and save it to the file path
