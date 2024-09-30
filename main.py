@@ -4,162 +4,125 @@ import feedparser
 from pydub import AudioSegment
 import simpleaudio as sa
 import io
-from tqdm import tqdm 
+from tqdm import tqdm
+import tkinter as tk
+from tkinter import ttk, messagebox
 
-
-
-# Itune's search api
+# iTunes search API
 api = "https://itunes.apple.com/search?term="
 
-# Print the results of itunes search and returns selected podcast's data
-def search_results(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        selection = 1 # keep track of choice
+class PodcastApp:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("PyCast")
 
-        # fetch and print podcast results
-        for item in data['results']:
-            print(f"Selection ID: {selection}")
-            print(f"Name: {item['trackName']}")
-            print(f"Artist: {item['artistName']}")
-            print("-"*40)
-            selection+=1
+        # Search Frame
+        self.search_frame = ttk.LabelFrame(master, text="Search for Podcasts")
+        self.search_frame.grid(row=0, padx=10, pady=10, sticky="ew")
 
-    else:
-        print("API Failure...")
+        self.search_label = ttk.Label(self.search_frame, text="Enter podcast name:")
+        self.search_label.grid(row=0, column=0, padx=5, pady=5)
 
-    podcast_choice = input(">> Choose Podcast by ID: ")
-    selected = data['results'][int(podcast_choice)-1]
-    print(f"Selected Podcast: {selected['trackName']}")
-    return selected
+        self.search_entry = ttk.Entry(self.search_frame, width=30)
+        self.search_entry.grid(row=0, column=1, padx=5, pady=5)
 
-# Returns the podcast rss
-def get_RSS(selected_podcast):
-    return selected_podcast['feedUrl']
+        self.search_button = ttk.Button(self.search_frame, text="Search", command=self.search_podcasts)
+        self.search_button.grid(row=0, column=2, padx=5, pady=5)
 
-# Simple parse of the rss 
-def parse_RSS(rss):
-    parsed_url = feedparser.parse(rss)
-    return parsed_url
+        # Results Frame
+        self.results_frame = ttk.LabelFrame(master, text="Search Results")
+        self.results_frame.grid(row=1, padx=10, pady=10, sticky="ew")
 
-# Get the total number of episodes available
-def get_episode_number(rss):
-    episodeList = rss['entries'] 
-    episode_number = len(episodeList)
-    return episode_number
+        self.results_listbox = tk.Listbox(self.results_frame, width=50, height=10)
+        self.results_listbox.grid(row=0, column=0, padx=5, pady=5)
 
-# Return choice of podcast episode, after printing all episodes
-def choose_episode_from_list(podcast_RSS):
-    episodeList = podcast_RSS['entries'] 
-    episode_number = len(episodeList)
-    for entry in episodeList:
-        print(f"{episode_number}.{entry['title']}")
-        episode_number-=1
+        self.select_button = ttk.Button(self.results_frame, text="Select Podcast", command=self.select_podcast)
+        self.select_button.grid(row=1, column=0, padx=5, pady=5)
 
-    choice = input(">> ID: ")
-    chosen = episodeList[len(episodeList)-int(choice)]['title']
-    print(f"Chosen Episode: {chosen}")
-    return choice
+        # Episode Frame
+        self.episode_frame = ttk.LabelFrame(master, text="Episodes")
+        self.episode_frame.grid(row=2, padx=10, pady=10, sticky="ew")
 
-# Returns podcast title(if it exists)
-def get_podcast_title(feed):
-    if "title" in feed.feed:
-        return feed.feed.title
-    else:
-        return "No title found"
+        self.episode_listbox = tk.Listbox(self.episode_frame, width=50, height=10)
+        self.episode_listbox.grid(row=0, column=0, padx=5, pady=5)
 
-# Function that streams episode
-def stream_episode(episode_url):
-    print(f"Streaming episode from: {episode_url}")
-    
-    # Download the MP3 stream
-    response = requests.get(episode_url, stream=True)
-    
-    if response.status_code == 200:
-        audio_data = response.content
-        
-        # Load the audio into pydub using io.BytesIO
-        audio = AudioSegment.from_file(io.BytesIO(audio_data), format="mp3")
-        
-        # Play the audio using simpleaudio
-        play_obj = sa.play_buffer(audio.raw_data, num_channels=audio.channels, bytes_per_sample=audio.sample_width, sample_rate=audio.frame_rate)
-        play_obj.wait_done()  # Wait for playback to finish
-    else:
-        print("Failed to stream the episode.")
+        self.action_button = ttk.Button(self.episode_frame, text="Download", command=self.download)
+        self.action_button.grid(row=1, column=0, padx=5, pady=5)
 
-# Filenames must be correct, otherwise it won't save correctly
-def sanitize_filename(filename):
-    return "".join(c for c in filename if c.isalnum() or c in (' ', '_')).rstrip()
+        self.podcast_data = None
+        self.parsed_rss = None
 
-# Download Episode as .mp3 file
-def download_mp3(episode, feed):
-    podcast_title = get_podcast_title(feed)
-    mp3_url, title = episode
+    def search_podcasts(self):
+        search_term = self.search_entry.get().replace(" ", "+")
+        url = f"{api}{search_term}&entity=podcast"
+        response = requests.get(url)
 
-    # Ensure podcast directory exists
-    if not os.path.isdir(podcast_title):
-        os.makedirs(podcast_title)
+        if response.status_code == 200:
+            data = response.json()
+            self.results_listbox.delete(0, tk.END)  # Clear previous results
+            self.podcast_data = data['results']  # Store podcast data for later use
+            for index, item in enumerate(self.podcast_data):
+                self.results_listbox.insert(tk.END, f" {item['trackName']} by {item['artistName']}")
+        else:
+            messagebox.showerror("Error", "API Failure...")
 
-    # Create a sanitized file name
-    episode_title = sanitize_filename(title) + ".mp3"
-    file_path = os.path.join(podcast_title, episode_title)
+    def select_podcast(self):
+        try:
+            selected_index = self.results_listbox.curselection()[0]
+            selected_podcast = self.podcast_data[selected_index]
+            rss_url = selected_podcast['feedUrl']
+            self.parsed_rss = self.parse_RSS(rss_url)
+            self.episode_listbox.delete(0, tk.END)  # Clear previous episodes
 
-    # Begin downloading the MP3 with a progress bar
-    response = requests.get(mp3_url, stream=True)
+            for index, entry in enumerate(self.parsed_rss.entries):
+                self.episode_listbox.insert(tk.END, f" {entry.title}")
+        except IndexError:
+            messagebox.showwarning("Warning", "Please select a podcast first.")
 
-    if response.status_code == 200:
-        total_size_in_bytes = int(response.headers.get('content-length', 0))
-        block_size = 1024  # 1 KB chunks
+    def parse_RSS(self, rss):
+        return feedparser.parse(rss)
 
-        # Use tqdm to show the download progress
-        with tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True, desc=episode_title) as progress_bar:
-            with open(file_path, 'wb') as file:
-                for data in response.iter_content(block_size):
-                    progress_bar.update(len(data))
-                    file.write(data)
+    def download(self):
+        try:
+            selected_index = self.episode_listbox.curselection()[0]
+            chosen_episode = self.parsed_rss.entries[selected_index]
+            mp3_url = next(enclosure.href for enclosure in chosen_episode.enclosures if enclosure.type == 'audio/mpeg')
 
-        print(f"Downloaded: {file_path}, Title: {title}")
-    else:
-        print("Download failed.")
+            self.download_mp3(chosen_episode.title, mp3_url)
+        except IndexError:
+            messagebox.showwarning("Warning", "Please select an episode first.")
 
-# Returns a tuple with mp3_url and episode title
-def get_episode_url(feed, episode):
-    episode_number = get_episode_number(feed)
+    def download_mp3(self, title, mp3_url):
+        # Ensure podcast directory exists
+        podcast_title = "Downloaded Podcasts"
+        if not os.path.isdir(podcast_title):
+            os.makedirs(podcast_title)
 
-    entry = feed.entries[episode_number-int(episode)]
+        episode_title = self.sanitize_filename(title) + ".mp3"
+        file_path = os.path.join(podcast_title, episode_title)
 
-    if 'enclosures' in entry:
-        for enclosure in entry.enclosures:
-            if enclosure.type == 'audio/mpeg':
-                mp3_url = enclosure.href
-                return (mp3_url, entry.title)
+        # Begin downloading the MP3 with a progress bar
+        response = requests.get(mp3_url, stream=True)
 
-# Main function
-def main():
-    search = input(">> Search Podcast: ").replace(" ", "+")
-    # entity as podcast, this only finds podcasts
-    url = api+search+"&entity=podcast"
-    podcast = search_results(url)
-    RSS = get_RSS(podcast)
-    podcast_title = podcast['trackName']
-    parsed_rss = parse_RSS(RSS)
-    episode = choose_episode_from_list(parsed_rss)    
-    episode_url = get_episode_url(parsed_rss, episode)
-    
+        if response.status_code == 200:
+            total_size_in_bytes = int(response.headers.get('content-length', 0))
+            block_size = 1024  # 1 KB chunks
 
-    # Ask the user whether to stream or download
-    action = input(">> Would you like to (S)tream or (D)ownload the episode? ").lower()
+            with tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True, desc=episode_title) as progress_bar:
+                with open(file_path, 'wb') as file:
+                    for data in response.iter_content(block_size):
+                        progress_bar.update(len(data))
+                        file.write(data)
 
-    if action == 's':
-        # Stream the episode
-        stream_episode(episode_url[0])  # The first item in the tuple is the mp3 URL
-    elif action == 'd':
-        # Download the episode
-        download_mp3(episode_url, parsed_rss)
-    else:
-        print("Invalid choice, please choose either 'S' for stream or 'D' for download.")
+            messagebox.showinfo("Success", f"Downloaded: {file_path}")
+        else:
+            messagebox.showerror("Error", "Download failed.")
+
+    def sanitize_filename(self, filename):
+        return "".join(c for c in filename if c.isalnum() or c in (' ', '_')).rstrip()
 
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = PodcastApp(root)
+    root.mainloop()
